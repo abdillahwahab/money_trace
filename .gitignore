@@ -6,3 +6,7 @@
 .vscode/
 *.iml
 **/local.properties
+android/local.properties
+.flutter-plugins
+.flutter-plugins-dependencies
+
