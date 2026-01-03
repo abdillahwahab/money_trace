@@ -285,8 +285,13 @@ class _HomePageState extends State<HomePage> {
       ),
     );
   }
-}
 
+  List<TransactionItem> _filteredTransactions() {
+    if (_selectedAccount == null) return List.from(_transactions);
+    return _transactions.where((t) => t.account == _selectedAccount).toList();
+  }
+
+}
 class AddTransactionPage extends StatefulWidget {
   final TransactionItem? existing;
   final List<String> existingAccounts;
