@@ -7,12 +7,13 @@ if (localPropertiesFile.exists()) {
     localPropertiesFile.withInputStream { localProperties.load(it) }
 }
 
-def flutterRoot = localProperties.getProperty('flutter.sdk')
+def flutterRoot = localProperties.getProperty('flutter.sdk') ?: System.getenv('FLUTTER_ROOT')
 if (flutterRoot == null) {
-    throw new GradleException("flutter.sdk not set in local.properties")
+    // In CI the flutter tool is available on PATH; flutter.gradle will be applied by the Flutter tooling.
+    logger.warn('flutter.sdk not set in local.properties and FLUTTER_ROOT not set; relying on Flutter tool on PATH')
+} else {
+    apply from: "$flutterRoot/packages/flutter_tools/gradle/flutter.gradle"
 }
-
-apply from: "$flutterRoot/packages/flutter_tools/gradle/flutter.gradle"
 
 android {
     namespace 'com.example.money_tracer'
