@@ -15,6 +15,7 @@ if (flutterRoot == null) {
 apply from: "$flutterRoot/packages/flutter_tools/gradle/flutter.gradle"
 
 android {
+    namespace 'com.example.money_tracer'
     compileSdkVersion 33
 
     compileOptions {
