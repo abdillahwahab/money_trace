@@ -34,17 +34,31 @@ jobs:
     - name: Get dependencies
       run: flutter pub get
     
-    - name: Build APK
-      run: flutter build apk --release
-    
+    - name: Build APK (verbose)
+      run: flutter build apk --release -v
+
+    - name: Debug build output (list files)
+      if: always()
+      run: |
+        echo "-- Build tree --"
+        ls -R build || true
+        echo "-- Find APKs --"
+        find . -type f -name "*.apk" -print || true
+
     - name: Upload APK artifact
+      if: always()
       uses: actions/upload-artifact@v4
       with:
         name: app-release
-        path: build/app/outputs/flutter-apk/app-release.apk
+        path: |
+          build/app/outputs/flutter-apk/app-release.apk
+          build/**/app-release.apk
+          build/**/*.apk
         retention-days: 30
-    
+
     - name: Display APK info
+      if: always()
       run: |
-        echo "✅ APK built successfully!"
-        ls -lh build/app/outputs/flutter-apk/app-release.apk
+        echo "Artifacts uploaded. Local APK listing:"
+        ls -lh build/app/outputs/flutter-apk || true
+        find build -name "*.apk" -maxdepth 5 -print || true
