@@ -34,8 +34,10 @@ jobs:
     - name: Get dependencies
       run: flutter pub get
     
-    - name: Build APK (verbose)
-      run: flutter build apk --release -v
+    - name: Build APK (verbose) and save log
+      run: |
+        mkdir -p build/logs
+        flutter build apk --release -v 2>&1 | tee build/logs/flutter-build.log
 
     - name: Debug build output (list files)
       if: always()
@@ -44,6 +46,8 @@ jobs:
         ls -R build || true
         echo "-- Find APKs --"
         find . -type f -name "*.apk" -print || true
+        echo "-- Show last 200 lines of build log (if present) --"
+        if [ -f build/logs/flutter-build.log ]; then tail -n 200 build/logs/flutter-build.log; else echo "no build log"; fi
 
     - name: Upload APK artifact
       if: always()
@@ -54,6 +58,7 @@ jobs:
           build/app/outputs/flutter-apk/app-release.apk
           build/**/app-release.apk
           build/**/*.apk
+          build/logs/flutter-build.log
         retention-days: 30
 
     - name: Display APK info
