@@ -1,0 +1,3 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Flutter needs it to exist, deprecated for embedding v2 -->
+</manifest>
