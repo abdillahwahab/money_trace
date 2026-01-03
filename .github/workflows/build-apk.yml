@@ -39,6 +39,28 @@ jobs:
         mkdir -p build/logs
         flutter build apk --release -v 2>&1 | tee build/logs/flutter-build.log
 
+    - name: Copy APK to repo root (if present)
+      if: always()
+      run: |
+        set -e
+        APK_PATH="build/app/outputs/flutter-apk/app-release.apk"
+        echo "[*] Looking for APK at: $APK_PATH"
+        if [ -f "$APK_PATH" ]; then
+          echo "[*] Found APK at expected path; copying to ./app-release.apk"
+          cp "$APK_PATH" ./app-release.apk || true
+        else
+          echo "[*] Expected APK not found; searching for any .apk under build/"
+          found=$(find build -type f -name "*.apk" | head -n 1 || true)
+          if [ -n "$found" ]; then
+            echo "[*] Found APK: $found; copying to ./app-release.apk"
+            cp "$found" ./app-release.apk || true
+          else
+            echo "[*] No APK found in build/"
+          fi
+        fi
+        echo "[*] Listing repo root APK (if present):"
+        ls -lh ./app-release.apk || true
+
     - name: Debug build output (list files)
       if: always()
       run: |
@@ -55,10 +77,19 @@ jobs:
       with:
         name: app-release
         path: |
+          # Common Flutter APK output
           build/app/outputs/flutter-apk/app-release.apk
+          # Copy-to-root fallback
+          ./app-release.apk
+          # Also include any APKs anywhere under build/
           build/**/app-release.apk
           build/**/*.apk
+          # Android Gradle outputs (if present)
+          android/app/build/outputs/**/*.apk
+          android/**/outputs/**/*.apk
+          # Upload full build logs and entire build directory for debugging
           build/logs/flutter-build.log
+          build/**
         retention-days: 30
 
     - name: Display APK info
