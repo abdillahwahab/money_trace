@@ -1,0 +1,21 @@
+# Dockerfile.dev - Simple approach using instrumentisto's multi-arch Flutter image
+# This image natively supports arm64 and amd64
+FROM instrumentisto/flutter:3.16
+
+WORKDIR /app
+
+# Configure Flutter (disable unused platforms)
+RUN flutter config --no-analytics && \
+    flutter config --enable-web=false && \
+    flutter config --enable-windows-desktop=false && \
+    flutter config --enable-macos-desktop=false && \
+    flutter config --enable-linux-desktop=false
+
+# Copy project files
+COPY . /app
+
+# Get dependencies
+RUN flutter pub get || true
+
+# Build APK (default command)
+CMD ["flutter", "build", "apk", "--release", "-v"]
