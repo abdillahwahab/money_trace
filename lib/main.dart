@@ -68,6 +68,7 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   List<TransactionItem> _transactions = [];
+  String? _selectedAccount;
   final _prefsKey = 'transactions';
 
   @override
@@ -85,6 +86,11 @@ class _HomePageState extends State<HomePage> {
           .map((e) => TransactionItem.fromJson(e as Map<String, dynamic>))
           .toList();
       _sortTransactions();
+      // initialize selected account to first ascending
+      final accounts = _uniqueAccounts();
+      if (accounts.isNotEmpty) {
+        _selectedAccount ??= accounts.first;
+      }
       setState(() {});
     }
   }
@@ -115,7 +121,11 @@ class _HomePageState extends State<HomePage> {
 
   Future<void> _addTransaction() async {
     final result = await Navigator.of(context).push<TransactionItem?>(
-      MaterialPageRoute(builder: (_) => const AddTransactionPage()),
+      MaterialPageRoute(
+          builder: (_) => AddTransactionPage(
+                existingAccounts: _uniqueAccounts(),
+                existingCategories: _uniqueCategories(),
+              )),
     );
     if (result != null) {
       setState(() {
@@ -124,6 +134,37 @@ class _HomePageState extends State<HomePage> {
       });
       await _saveTransactions();
     }
+  }
+
+  Future<void> _editTransaction(int index) async {
+    final existing = _transactions[index];
+    final result = await Navigator.of(context).push<TransactionItem?>(
+      MaterialPageRoute(
+          builder: (_) => AddTransactionPage(
+                existing: existing,
+                existingAccounts: _uniqueAccounts(),
+                existingCategories: _uniqueCategories(),
+              )),
+    );
+    if (result != null) {
+      setState(() {
+        _transactions[index] = result;
+        _sortTransactions();
+      });
+      await _saveTransactions();
+    }
+  }
+
+  List<String> _uniqueAccounts() {
+    final s = _transactions.map((t) => t.account).toSet().toList();
+    s.sort((a, b) => a.compareTo(b));
+    return s;
+  }
+
+  List<String> _uniqueCategories() {
+    final s = _transactions.map((t) => t.category).toSet().toList();
+    s.sort((a, b) => a.compareTo(b));
+    return s;
   }
 
   Future<void> _deleteTransaction(int index) async {
@@ -167,26 +208,70 @@ class _HomePageState extends State<HomePage> {
               ],
             ),
           ),
+          // Account filter selector
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Row(
+              children: [
+                const Text('Filter Rekening: '),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Builder(builder: (ctx) {
+                    final accounts = _uniqueAccounts();
+                    if (accounts.isEmpty) {
+                      return const Text('Tidak ada rekening');
+                    }
+                    // ensure selectedAccount has default
+                    _selectedAccount ??= accounts.first;
+                    return DropdownButton<String>(
+                      isExpanded: true,
+                      value: _selectedAccount,
+                      items: accounts.map((a) => DropdownMenuItem(value: a, child: Text(a))).toList(),
+                      onChanged: (v) => setState(() => _selectedAccount = v),
+                    );
+                  }),
+                )
+              ],
+            ),
+          ),
           Expanded(
-            child: _transactions.isEmpty
+            child: _filteredTransactions().isEmpty
                 ? const Center(child: Text('Belum ada transaksi. Tekan + untuk menambah.'))
                 : ListView.separated(
-                    itemCount: _transactions.length,
+                    itemCount: _filteredTransactions().length,
                     separatorBuilder: (_, __) => const Divider(height: 1),
                     itemBuilder: (context, index) {
-                      final t = _transactions[index];
+                      final t = _filteredTransactions()[index];
+                      final realIndex = _transactions.indexOf(t);
                       return Dismissible(
                         key: ValueKey(t.date.toIso8601String() + t.amount.toString() + t.category),
                         direction: DismissDirection.endToStart,
                         background: Container(color: Colors.red, alignment: Alignment.centerRight, padding: const EdgeInsets.symmetric(horizontal: 16), child: const Icon(Icons.delete, color: Colors.white)),
-                        onDismissed: (_) => _deleteTransaction(index),
+                        onDismissed: (_) => _deleteTransaction(realIndex),
                         child: ListTile(
                           title: Text(t.category),
                           subtitle: Text('${t.account} • ${DateFormat.yMMMd().add_jm().format(t.date)}'),
-                          trailing: Text(
-                            (t.type == 'in' ? '+ ' : '- ') + formatCurrency(t.amount),
-                            style: TextStyle(color: t.type == 'in' ? Colors.green[700] : Colors.red[700], fontWeight: FontWeight.bold),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                (t.type == 'in' ? '+ ' : '- ') + formatCurrency(t.amount),
+                                style: TextStyle(color: t.type == 'in' ? Colors.green[700] : Colors.red[700], fontWeight: FontWeight.bold),
+                              ),
+                              const SizedBox(width: 8),
+                              PopupMenuButton<String>(
+                                onSelected: (v) async {
+                                  if (v == 'edit') await _editTransaction(realIndex);
+                                  if (v == 'delete') await _deleteTransaction(realIndex);
+                                },
+                                itemBuilder: (_) => const [
+                                  PopupMenuItem(value: 'edit', child: Text('Edit')),
+                                  PopupMenuItem(value: 'delete', child: Text('Hapus')),
+                                ],
+                              )
+                            ],
                           ),
+                          onTap: () async => await _editTransaction(realIndex),
                         ),
                       );
                     },
@@ -203,7 +288,11 @@ class _HomePageState extends State<HomePage> {
 }
 
 class AddTransactionPage extends StatefulWidget {
-  const AddTransactionPage({Key? key}) : super(key: key);
+  final TransactionItem? existing;
+  final List<String> existingAccounts;
+  final List<String> existingCategories;
+
+  const AddTransactionPage({Key? key, this.existing, this.existingAccounts = const [], this.existingCategories = const []}) : super(key: key);
 
   @override
   State<AddTransactionPage> createState() => _AddTransactionPageState();
@@ -217,6 +306,25 @@ class _AddTransactionPageState extends State<AddTransactionPage> {
   String _amount = '';
   String _category = '';
   String _note = '';
+
+  late final List<String> _accountOptions;
+  late final List<String> _categoryOptions;
+
+  @override
+  void initState() {
+    super.initState();
+    _accountOptions = List<String>.from(widget.existingAccounts);
+    _categoryOptions = List<String>.from(widget.existingCategories);
+    if (widget.existing != null) {
+      final e = widget.existing!;
+      _date = e.date;
+      _account = e.account;
+      _type = e.type;
+      _amount = e.amount.toString();
+      _category = e.category;
+      _note = e.note;
+    }
+  }
 
   Future<void> _pickDate() async {
     final picked = await showDatePicker(
@@ -283,10 +391,24 @@ class _AddTransactionPageState extends State<AddTransactionPage> {
                 ],
               ),
               const SizedBox(height: 8),
-              TextFormField(
-                decoration: const InputDecoration(labelText: 'Rekening Sumber'),
-                onSaved: (v) => _account = v?.trim() ?? '',
-                validator: (v) => (v == null || v.isEmpty) ? 'Masukkan rekening' : null,
+              // Rekening with suggestions from previous entries
+              Autocomplete<String>(
+                initialValue: TextEditingValue(text: _account),
+                optionsBuilder: (textEditingValue) {
+                  final q = textEditingValue.text.toLowerCase();
+                  return _accountOptions.where((a) => a.toLowerCase().contains(q));
+                },
+                fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+                  controller.text = _account;
+                  return TextFormField(
+                    controller: controller,
+                    focusNode: focusNode,
+                    decoration: const InputDecoration(labelText: 'Rekening Sumber'),
+                    onSaved: (v) => _account = v?.trim() ?? '',
+                    validator: (v) => (v == null || v.isEmpty) ? 'Masukkan rekening' : null,
+                  );
+                },
+                onSelected: (s) => _account = s,
               ),
               const SizedBox(height: 8),
               DropdownButtonFormField<String>(
@@ -306,10 +428,24 @@ class _AddTransactionPageState extends State<AddTransactionPage> {
                 validator: (v) => (v == null || v.isEmpty) ? 'Masukkan nominal' : null,
               ),
               const SizedBox(height: 8),
-              TextFormField(
-                decoration: const InputDecoration(labelText: 'Category'),
-                onSaved: (v) => _category = v?.trim() ?? '',
-                validator: (v) => (v == null || v.isEmpty) ? 'Masukkan kategori' : null,
+              // Category with suggestions
+              Autocomplete<String>(
+                initialValue: TextEditingValue(text: _category),
+                optionsBuilder: (textEditingValue) {
+                  final q = textEditingValue.text.toLowerCase();
+                  return _categoryOptions.where((c) => c.toLowerCase().contains(q));
+                },
+                fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+                  controller.text = _category;
+                  return TextFormField(
+                    controller: controller,
+                    focusNode: focusNode,
+                    decoration: const InputDecoration(labelText: 'Category'),
+                    onSaved: (v) => _category = v?.trim() ?? '',
+                    validator: (v) => (v == null || v.isEmpty) ? 'Masukkan kategori' : null,
+                  );
+                },
+                onSelected: (s) => _category = s,
               ),
               const SizedBox(height: 8),
               TextFormField(
