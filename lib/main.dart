@@ -69,6 +69,7 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   List<TransactionItem> _transactions = [];
   String? _selectedAccount;
+  DateTime _selectedMonth = DateTime(DateTime.now().year, DateTime.now().month, 1);
   final _prefsKey = 'transactions';
 
   @override
@@ -107,7 +108,7 @@ class _HomePageState extends State<HomePage> {
 
   int get balance {
     var sum = 0;
-    for (final t in _transactions) {
+    for (final t in _filteredTransactions()) {
       if (t.type == 'in') sum += t.amount;
       else sum -= t.amount;
     }
@@ -167,6 +168,20 @@ class _HomePageState extends State<HomePage> {
     return s;
   }
 
+  bool _isSameMonth(DateTime a, DateTime b) => a.year == b.year && a.month == b.month;
+
+  void _prevMonth() {
+    setState(() {
+      _selectedMonth = DateTime(_selectedMonth.year, _selectedMonth.month - 1, 1);
+    });
+  }
+
+  void _nextMonth() {
+    setState(() {
+      _selectedMonth = DateTime(_selectedMonth.year, _selectedMonth.month + 1, 1);
+    });
+  }
+
   Future<void> _deleteTransaction(int index) async {
     final removed = _transactions.removeAt(index);
     setState(() {});
@@ -185,26 +200,43 @@ class _HomePageState extends State<HomePage> {
           Container(
             width: double.infinity,
             color: Colors.teal[50],
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text('Saldo', style: TextStyle(fontSize: 14, color: Colors.black54)),
-                    const SizedBox(height: 6),
-                    Text(formatCurrency(balance), style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+                    Row(
+                      children: [
+                        IconButton(onPressed: _prevMonth, icon: const Icon(Icons.chevron_left)),
+                        GestureDetector(
+                          onHorizontalDragEnd: (d) {
+                            if (d.primaryVelocity != null && d.primaryVelocity! < 0) _nextMonth();
+                            if (d.primaryVelocity != null && d.primaryVelocity! > 0) _prevMonth();
+                          },
+                          child: Text(
+                            DateFormat.yMMMM().format(_selectedMonth),
+                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                        IconButton(onPressed: _nextMonth, icon: const Icon(Icons.chevron_right)),
+                      ],
+                    ),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        const Text('Total Transaksi', style: TextStyle(color: Colors.grey)),
+                        const SizedBox(height: 6),
+                        Text('${_filteredTransactions().length}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                      ],
+                    ),
                   ],
                 ),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text('Total Transaksi', style: TextStyle(color: Colors.grey[700])),
-                    const SizedBox(height: 6),
-                    Text('${_transactions.length}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-                  ],
-                )
+                const SizedBox(height: 8),
+                const Text('Saldo', style: TextStyle(fontSize: 12, color: Colors.black54)),
+                const SizedBox(height: 4),
+                Text(formatCurrency(balance), style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
               ],
             ),
           ),
@@ -287,8 +319,8 @@ class _HomePageState extends State<HomePage> {
   }
 
   List<TransactionItem> _filteredTransactions() {
-    if (_selectedAccount == null) return List.from(_transactions);
-    return _transactions.where((t) => t.account == _selectedAccount).toList();
+    if (_selectedAccount == null) return [];
+    return _transactions.where((t) => t.account == _selectedAccount && _isSameMonth(t.date, _selectedMonth)).toList();
   }
 
 }
